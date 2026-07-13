@@ -61,4 +61,19 @@ interface LayoutInterface
      * @return null|\PPBEMJSONContent
      */
     public function getContent();
+
+    /**
+     * Renders final html output.
+     *
+     * @return string|null
+     */
+    public function display();
+
+    /**
+     * Toggles template engine debug mode.
+     *
+     * @param bool $value
+     * @return $this
+     */
+    public function setDebug($value);
 }

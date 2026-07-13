@@ -3,10 +3,12 @@
 use PP\Lib\Http\Response;
 use PP\DependencyInjection\ContainerAwareInterface;
 use PP\Lib\Engine\AbstractEngine;
+use PP\Lib\Html\Layout\LayoutInterface;
+use PP\Lib\Html\Layout\UserLayoutInterface;
 
 class PXEngineIndex extends AbstractEngine
 {
-    public $layout = ['factory' => 'PXUserHTMLLayout'];
+    public $layout = ['factory' => LayoutInterface::class, 'helper' => true];
 
     /**
      * Инициализация основных объектов приложения
@@ -20,12 +22,37 @@ class PXEngineIndex extends AbstractEngine
         $this->content->tree = new PXTreeObjects();
         $this->content->objects = new PXObjects();
         $this->content->subObjects = new PXSubObjects();
-
-        $this->layout->setApp($this->app);
     }
 
     protected function initModules()
     {
+    }
+
+    /**
+     * Template engine is swappable: project may define a public service
+     * with id `PP\Lib\Html\Layout\LayoutInterface` in app/config/services.yml
+     * (e.g. pointing to PP\Lib\Html\Layout\TwigLayout). Without the service
+     * legacy Smarty-based PXUserHTMLLayout is used.
+     *
+     * @param string $layoutClass
+     */
+    protected function initLayout($layoutClass)
+    {
+        if ($this->container->has($layoutClass)) {
+            $layout = $this->container->get($layoutClass);
+
+            if (!$layout instanceof UserLayoutInterface) {
+                FatalError(sprintf(
+                    "Layout service '%s' must implement %s",
+                    $layoutClass,
+                    UserLayoutInterface::class
+                ));
+            }
+        } else {
+            $layout = new PXUserHTMLLayout();
+        }
+
+        $this->layout = $layout->setApp($this->app);
     }
 
     public function fillLayout()

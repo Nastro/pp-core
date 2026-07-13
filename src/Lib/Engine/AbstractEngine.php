@@ -80,6 +80,7 @@ abstract class AbstractEngine implements EngineInterface
         }
 
         $this->app->loadProperties($this->db);
+        $this->layout->setDebug($this->app->isDevelopmentMode());
         $this->db->loadDirectoriesAutomatic($this->app->directory);
 
         $this->initModules();
@@ -134,16 +135,22 @@ abstract class AbstractEngine implements EngineInterface
                 continue;
             }
 
-            if (!class_exists($this->{$var}['factory'])) {
-                \FatalError("Factory class '{$this->{$var}['factory']}' for '{$var}' is not exists !");
-            }
-
+            $factory = $this->{$var}['factory'];
             $initHelper = (!empty($this->{$var}['helper']) && method_exists($this, 'init' . ucfirst((string) $var)) ? 'init' . ucfirst((string) $var) : false);
 
-            if ($initHelper) {
-                $this->$initHelper($this->{$var}['factory']);
-            } else {
-                $this->$var = new $this->{$var}['factory']();
+            switch (true) {
+                // interface factories (e.g. LayoutInterface) can only be
+                // resolved through an init-helper, usually via DI container
+                case $initHelper && (class_exists($factory) || interface_exists($factory)):
+                    $this->$initHelper($factory);
+                    break;
+
+                case class_exists($factory):
+                    $this->$var = new $factory();
+                    break;
+
+                default:
+                    \FatalError("Factory class '{$factory}' for '{$var}' is not exists !");
             }
         }
     }

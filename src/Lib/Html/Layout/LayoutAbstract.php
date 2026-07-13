@@ -116,6 +116,22 @@ abstract class LayoutAbstract implements LayoutInterface
         return null;
     }
 
+    /**
+     * {@inheritdoc}
+     */
+    public function display()
+    {
+        return $this->html();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setDebug($value)
+    {
+        return $this;
+    }
+
     public function _arrayToAttrs($array)
     {
         if (!sizeof($array)) {

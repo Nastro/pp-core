@@ -1,13 +1,13 @@
 <?php
 
-use PP\Lib\Html\Layout\LayoutInterface;
+use PP\Lib\Html\Layout\UserLayoutInterface;
 
 /**
  * TODO: Refactor and move this file to src/Lib/Html/Layout
  *
  * Class PXUserHTMLLayout
  */
-class PXUserHTMLLayout implements LayoutInterface
+class PXUserHTMLLayout implements UserLayoutInterface
 {
 	public $smarty;
 	public $_filters;
@@ -185,6 +185,16 @@ class PXUserHTMLLayout implements LayoutInterface
 	public function getSmarty()
 	{
 		return $this->smarty;
+	}
+
+	/**
+	 * {@inheritdoc}
+	 */
+	public function setDebug($value)
+	{
+		$this->smarty->debugging = (bool)$value;
+
+		return $this;
 	}
 
 	/**

@@ -1,5 +1,17 @@
 # Change log
 
+## [3.1.12] 2026-07-10
+- Шаблонизатор клиентской части выбирается через DI: сервис `PP\Lib\Html\Layout\LayoutInterface`
+  в services.yml проекта, фолбэк на легаси `PXUserHTMLLayout` (Smarty 2) без конфигурации
+- Добавлен `TwigLayout` — реализация клиентского layout на Twig 3, включая пагинацию
+  (`pager`/`autopager`, `templates/misc/pager/*.twig`) и Smarty-совместимые фильтры
+- Добавлена зависимость `twig/twig: ^3.0`
+- Консольные команды `templates:convert` (конвертация Smarty 2 → Twig с отчётом о местах,
+  требующих ручного вмешательства) и `templates:verify` (golden-master сравнение рендера
+  Smarty и Twig), см. docs/templates.md
+- Исправлена инициализация фабрик в `AbstractEngine`: поддержка интерфейсов в качестве
+  фабрики (через init-хелпер и DI-контейнер), добавлен `LayoutInterface::setDebug()`
+
 ## [3.1.11] 2026-02-24
 - Улучшение безопасности работы с сессией в админ панели
 

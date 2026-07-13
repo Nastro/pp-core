@@ -1,0 +1,2 @@
+{%- set title = lang({get: 'pager.item'}) -%}
+<a href="{{ pagehref }}{{ pagevar }}={{ item }}" title="{{ title|smarty_replace('%item%', item)|smarty_replace('%all%', pages) }}"{% if item == page %} class="active"{% endif %}>{{ item }}<b></b></a>{{ " " -}}

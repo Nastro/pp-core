@@ -72,4 +72,20 @@ class NullLayout implements LayoutInterface
         return null;
     }
 
+    /**
+     * {@inheritdoc}
+     */
+    public function display()
+    {
+        return null;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setDebug($value)
+    {
+        return $this;
+    }
+
 }

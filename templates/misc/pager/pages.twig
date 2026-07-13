@@ -1,0 +1,24 @@
+{%- if pages > 1 and max_page > 1 -%}
+{%- set min = page - 2 > 0 ? page - 2 : 1 -%}
+{%- set max = pages - page - 2 > 0 ? page + 3 : pages + 1 -%}
+{%- set premax = min - 3 > 0 ? 3 : min -%}
+{%- set postmin = pages - max > 0 ? pages - 1 : max -%}
+{%- set postmax = pages + 1 -%}
+{%- set prev = page - 1 -%}
+{%- set next = page + 1 -%}
+{%- set pagevar = name|smarty_default('page') -%}
+{%- set pagehref = pager_href(pagevar) -%}
+<p class="lister"><a href="{{ pagehref }}{{ pagevar }}={{ prev }}"{% if prev == 0 %} class="disabled"{% endif %}>&larr;<span>Предыдущая</span></a><a href="{{ pagehref }}{{ pagevar }}={{ next }}"{% if next > pages %} class="disabled"{% endif %}><span>Следующая</span>&rarr;</a></p>
+{#- glue: smarty strip left no whitespace between the two paragraphs -#}
+<p class="pages">
+{%- if min != 1 -%}
+{%- for i in 1..premax - 1 -%}{% include 'misc/pager/item.twig' with {item: i} %}{%- endfor -%}
+{%- endif -%}
+{%- if premax != min -%}<span> &hellip; </span>{%- endif -%}
+{%- for i in min..max - 1 -%}{% include 'misc/pager/item.twig' with {item: i} %}{%- endfor -%}
+{%- if postmin != max -%}<span> &hellip; </span>{%- endif -%}
+{%- if max != postmax -%}
+{%- for i in postmin..postmax - 1 -%}{% include 'misc/pager/item.twig' with {item: i} %}{%- endfor -%}
+{%- endif -%}
+</p>
+{%- endif -%}
