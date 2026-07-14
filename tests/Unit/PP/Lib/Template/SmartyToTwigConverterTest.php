@@ -41,6 +41,49 @@ class SmartyToTwigConverterTest extends AbstractUnitTest
         $this->assertEquals('{{ tree.getById(id).title }}', $this->convert('{$tree->getById($id)->title}'));
     }
 
+    public function testDynamicKeyFollowedByPathContinuesOuterVariable()
+    {
+        // Smarty 2 `.$key` index is a plain word; `->prop`/`.key` after it
+        // belongs to the outer path, not to the key expression.
+        $this->assertEquals(
+            '{{ tree.leafs[navId].content.show_menu_item }}',
+            $this->convert('{$tree->leafs.$navId->content.show_menu_item}')
+        );
+        $this->assertEquals('{{ map[k][j] }}', $this->convert('{$map.$k.$j}'));
+    }
+
+    public function testBackslashesInStringsSurviveTwigLexer()
+    {
+        // twig lexer applies stripcslashes() to literals: a smarty regex
+        // '/\?.*$/' must be re-escaped or twig turns it into '/?.*$/'
+        $this->assertEquals(
+            "{{ url|regex_replace('/\\\\?.*\$/', '') }}",
+            $this->convert('{$url|regex_replace:\'/\\?.*$/\':\'\'}')
+        );
+        $this->assertEquals("{{ 'a\\\\'|cat('b') }}", $this->convert("{'a\\\\'|cat:'b'}"));
+    }
+
+    public function testStrictComparisonBecomesSameAsTest()
+    {
+        $result = $this->converter->convertSource("{if \$tariff.internet === '1'}Гб{/if}");
+        $this->assertTrue($result->isClean());
+        $this->assertEquals("{% if tariff.internet is same as('1') %}Гб{% endif %}", $result->twig);
+
+        $this->assertEquals(
+            '{% if a is not same as(true) and b is same as(10) %}x{% endif %}',
+            $this->convert('{if $a !== true && $b === 10}x{/if}')
+        );
+    }
+
+    public function testSectionWithExplicitStepOneIsClean()
+    {
+        $result = $this->converter->convertSource(
+            '{section name=p start=1 loop=$total+1 step=1}{$smarty.section.p.index}{/section}'
+        );
+        $this->assertTrue($result->isClean());
+        $this->assertStringContainsString('{% for __sec_p in', $result->twig);
+    }
+
     public function testConditions()
     {
         $this->assertEquals(

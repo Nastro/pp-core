@@ -405,6 +405,10 @@ class Converter
             return;
         }
 
+        if (isset($attrs['step']) && trim($attrs['step'], '\'" ') === '1') {
+            unset($attrs['step']); // explicit step=1 equals the default
+        }
+
         foreach (['step', 'max', 'show'] as $unsupported) {
             if (isset($attrs[$unsupported])) {
                 $this->issue("{section} attribute '{$unsupported}' is not supported — port manually", ConversionIssue::ERROR);

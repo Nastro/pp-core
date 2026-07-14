@@ -18,7 +18,6 @@ use Symfony\Component\Console\Output\OutputInterface;
  *   pp templates:convert                        # BASEPATH/local/templates
  *   pp templates:convert local/templates/lt     # subtree only
  *   pp templates:convert --dry-run              # report without writing
- *   pp templates:convert --verify               # render both engines and diff
  *
  * Class ConvertTemplatesCommand
  * @package PP\Command\Templates
@@ -36,9 +35,7 @@ class ConvertTemplatesCommand extends AbstractCommand
             ->setHelp('Converts .tmpl templates to .twig, reporting constructs that need manual porting')
             ->addArgument('path', InputArgument::OPTIONAL, 'templates directory or single .tmpl file, relative to project root')
             ->addOption('dry-run', 'd', InputOption::VALUE_NONE, 'do not write .twig files')
-            ->addOption('force', 'f', InputOption::VALUE_NONE, 'overwrite existing .twig files')
-            ->addOption('verify', null, InputOption::VALUE_NONE, 'render each converted template with Smarty and Twig and compare html')
-            ->addOption('strict', null, InputOption::VALUE_NONE, 'byte-exact comparison on --verify (default ignores whitespace)');
+            ->addOption('force', 'f', InputOption::VALUE_NONE, 'overwrite existing .twig files');
     }
 
     /**
@@ -65,7 +62,6 @@ class ConvertTemplatesCommand extends AbstractCommand
 
         $converter = new Converter();
         $stats = ['clean' => 0, 'warnings' => 0, 'manual' => 0, 'skipped' => 0];
-        $converted = [];
 
         foreach ($files as $file) {
             $relative = ltrim(str_replace($root, '', $file), '/');
@@ -107,7 +103,6 @@ class ConvertTemplatesCommand extends AbstractCommand
 
             if (!$input->getOption('dry-run')) {
                 file_put_contents($target, $result->twig);
-                $converted[] = $file;
             }
         }
 
@@ -119,16 +114,6 @@ class ConvertTemplatesCommand extends AbstractCommand
             $stats['manual'],
             $stats['skipped']
         ));
-
-        if ($input->getOption('verify') && !$input->getOption('dry-run')) {
-            $output->writeln('');
-            return VerifyTemplatesCommand::verifyFiles(
-                $output,
-                $root,
-                $converted,
-                (bool)$input->getOption('strict')
-            );
-        }
 
         return $stats['manual'] > 0 ? Command::FAILURE : Command::SUCCESS;
     }

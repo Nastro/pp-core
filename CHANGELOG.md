@@ -5,12 +5,27 @@
   в services.yml проекта, фолбэк на легаси `PXUserHTMLLayout` (Smarty 2) без конфигурации
 - Добавлен `TwigLayout` — реализация клиентского layout на Twig 3, включая пагинацию
   (`pager`/`autopager`, `templates/misc/pager/*.twig`) и Smarty-совместимые фильтры
-- Добавлена зависимость `twig/twig: ^3.0`
-- Консольные команды `templates:convert` (конвертация Smarty 2 → Twig с отчётом о местах,
-  требующих ручного вмешательства) и `templates:verify` (golden-master сравнение рендера
-  Smarty и Twig), см. docs/templates.md
+- Twig — опциональная зависимость (`suggest`): pp-core не требует `twig/twig` сам,
+  пакет ставит проект, включающий `TwigLayout`; без него ядро работает как «голое» API
+- Консольная команда `templates:convert` — конвертация Smarty 2 → Twig с отчётом
+  о местах, требующих ручного вмешательства, см. docs/templates.md
 - Исправлена инициализация фабрик в `AbstractEngine`: поддержка интерфейсов в качестве
   фабрики (через init-хелпер и DI-контейнер), добавлен `LayoutInterface::setDebug()`
+- Конвертер шаблонов: `===`/`!==` конвертируются в twig-тест `is same as()` (строгое
+  сравнение вместо даунгрейда до `==`/`!=`), `{section step=1}` считается штатным,
+  исправлен разбор пути после динамического ключа (`$a->b.$k->c` → `a.b[k].c`)
+- `TwigLayout`: фолбэк модификаторов на PHP-функции, принимающие аргумент по ссылке
+  (`reset`, `end`, `current`, `key`, ...), больше не приводит к ошибке рендера
+- `PXStructLeaf`/`PXTreeObjects`: `__call` кидает `BadMethodCallException` вместо
+  `FatalError` (Twig перехватывает его при разрешении атрибутов), добавлен
+  `PXStructLeaf::__isset`, `PXTreeObjects::__isset` возвращает true для `current`/`root` —
+  доступ к атрибутам из Twig идёт через магию `__get`, как в Smarty, а не через
+  одноимённые методы `Iterator`
+- `PXObjects::__isset`: доступ `objects.current`/`objects.first` из Twig идёт через
+  защищённый `__get`, а не через незащищённый `getCurrent()` (давал Warning
+  «Undefined array key -1» и null на страницах без текущего объекта)
+- Конвертер: бэкслеши в строковых литералах перекодируются под лексер Twig
+  (`stripcslashes`) — регэкспы вида `'/\?.*$/'` больше не ломаются при конвертации
 
 ## [3.1.11] 2026-02-24
 - Улучшение безопасности работы с сессией в админ панели

@@ -55,6 +55,12 @@ class TwigLayout implements UserLayoutInterface
      */
     public function __construct(array $templateDirs = null)
     {
+        if (!class_exists(Environment::class)) {
+            throw new \RuntimeException(
+                'TwigLayout requires the optional "twig/twig" package: composer require "twig/twig:^3.0"'
+            );
+        }
+
         $this->customDirs = $templateDirs;
 
         $loader = new FilesystemLoader(array_filter($this->templateDirs(), 'is_dir'));
@@ -75,7 +81,22 @@ class TwigLayout implements UserLayoutInterface
         // Smarty 2 falls back to plain PHP functions for unknown
         // modifiers ({$var|quot}) and template functions — keep that.
         $this->twig->registerUndefinedFilterCallback(function ($name) {
-            return function_exists($name) ? new TwigFilter($name, $name) : false;
+            if (!function_exists($name)) {
+                return false;
+            }
+
+            // functions taking the argument by reference cannot be called
+            // with a twig expression value directly
+            $byRef = [
+                'reset' => static fn ($a) => is_array($a) && $a ? $a[array_key_first($a)] : false,
+                'current' => static fn ($a) => is_array($a) && $a ? $a[array_key_first($a)] : false,
+                'end' => static fn ($a) => is_array($a) && $a ? $a[array_key_last($a)] : false,
+                'key' => static fn ($a) => is_array($a) && $a ? array_key_first($a) : null,
+                'array_shift' => static fn ($a) => is_array($a) && $a ? $a[array_key_first($a)] : null,
+                'array_pop' => static fn ($a) => is_array($a) && $a ? $a[array_key_last($a)] : null,
+            ];
+
+            return new TwigFilter($name, $byRef[$name] ?? $name);
         });
         $this->twig->registerUndefinedFunctionCallback(function ($name) {
             return function_exists($name) ? new TwigFunction($name, $name) : false;

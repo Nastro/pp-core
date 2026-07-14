@@ -267,12 +267,10 @@ class ExpressionConverter
             // multi-char operators
             $three = substr($expr, $i, 3);
             if ($three === '===' || $three === '!==') {
-                $this->converter->issue(
-                    "operator '{$three}' downgraded to loose comparison — check semantics",
-                    ConversionIssue::WARNING
-                );
-                $out .= $three === '===' ? '==' : '!=';
                 $i += 3;
+                $rhs = $this->parseStrictComparisonRhs($expr, $i);
+                $out = rtrim($out);
+                $out .= ($three === '===' ? ' is same as(' : ' is not same as(') . $rhs . ')';
                 continue;
             }
 
@@ -293,6 +291,64 @@ class ExpressionConverter
         }
 
         return trim($out);
+    }
+
+    /**
+     * Parses the single operand to the right of `===`/`!==` so it can be
+     * wrapped into a twig `is same as(...)` identity test.
+     *
+     * @param string $expr
+     * @param int $i byref position (just past the operator)
+     * @return string
+     * @throws ConversionException
+     */
+    private function parseStrictComparisonRhs($expr, &$i)
+    {
+        $length = strlen($expr);
+        while ($i < $length && ctype_space($expr[$i])) {
+            $i++;
+        }
+        if ($i >= $length) {
+            throw new ConversionException('missing right operand of strict comparison');
+        }
+
+        $char = $expr[$i];
+
+        if ($char === '$') {
+            return $this->parseVariable($expr, $i);
+        }
+        if ($char === "'") {
+            return $this->parseSingleQuoted($expr, $i);
+        }
+        if ($char === '"') {
+            return $this->parseDoubleQuoted($expr, $i);
+        }
+        if ($char === '(') {
+            $inner = $this->extractBalanced($expr, $i, '(', ')');
+            return '(' . $this->convertOperand(trim($inner)) . ')';
+        }
+        if (ctype_digit($char) || $char === '-'
+            || ($char === '.' && $i + 1 < $length && ctype_digit($expr[$i + 1]))
+        ) {
+            $start = $i;
+            $i++;
+            while ($i < $length && (ctype_digit($expr[$i]) || $expr[$i] === '.')) {
+                $i++;
+            }
+            return substr($expr, $start, $i - $start);
+        }
+        if (ctype_alpha($char) || $char === '_') {
+            $start = $i;
+            while ($i < $length && (ctype_alnum($expr[$i]) || $expr[$i] === '_')) {
+                $i++;
+            }
+            $word = substr($expr, $start, $i - $start);
+            $lower = strtolower($word);
+
+            return in_array($lower, ['true', 'false', 'null'], true) ? $lower : "'" . $word . "'";
+        }
+
+        throw new ConversionException('unsupported right operand of strict comparison');
     }
 
     /**
@@ -357,9 +413,18 @@ class ExpressionConverter
                 $next = $i + 1 < $length ? $expr[$i + 1] : '';
 
                 if ($next === '$') {
-                    $i++; // skip '.'
-                    $inner = $this->parseVariable($expr, $i);
-                    $out .= '[' . $inner . ']';
+                    // Smarty 2 dynamic index `.$key` is a plain word only;
+                    // `->prop` after it continues the outer path.
+                    $i += 2; // skip '.$'
+                    $kStart = $i;
+                    while ($i < $length && (ctype_alnum($expr[$i]) || $expr[$i] === '_')) {
+                        $i++;
+                    }
+                    $key = substr($expr, $kStart, $i - $kStart);
+                    if ($key === '') {
+                        throw new ConversionException('malformed dynamic key `.$`');
+                    }
+                    $out .= '[' . $key . ']';
                     continue;
                 }
 
@@ -572,18 +637,29 @@ class ExpressionConverter
     private function parseSingleQuoted($expr, &$i)
     {
         $length = strlen($expr);
-        $start = $i;
         $i++;
+        $raw = '';
 
         while ($i < $length) {
-            if ($expr[$i] === '\\') {
+            $char = $expr[$i];
+
+            if ($char === '\\' && $i + 1 < $length) {
+                $next = $expr[$i + 1];
+                // php single-quote semantics: only \\ and \' are escapes
+                $raw .= ($next === '\\' || $next === "'") ? $next : '\\' . $next;
                 $i += 2;
                 continue;
             }
-            if ($expr[$i] === "'") {
+
+            if ($char === "'") {
                 $i++;
-                return $this->replaceTmplExtension(substr($expr, $start, $i - $start));
+                // twig lexer runs stripcslashes() on the literal, so every
+                // backslash must be doubled to survive (e.g. regex '\?')
+                $encoded = strtr($raw, ['\\' => '\\\\', "'" => "\\'"]);
+                return $this->replaceTmplExtension("'" . $encoded . "'");
             }
+
+            $raw .= $char;
             $i++;
         }
 
@@ -609,7 +685,15 @@ class ExpressionConverter
             $char = $expr[$i];
 
             if ($char === '\\') {
-                $out .= substr($expr, $i, 2);
+                $next = $i + 1 < $length ? $expr[$i + 1] : '';
+                if ($next !== '' && strpos("nrtvfe\\\"\$0123456789xu", $next) !== false) {
+                    // escape sequences twig's stripcslashes() treats like php
+                    $out .= '\\' . $next;
+                } else {
+                    // php keeps unknown escapes verbatim (\? stays \?),
+                    // stripcslashes would swallow the backslash — double it
+                    $out .= '\\\\' . $next;
+                }
                 $i += 2;
                 continue;
             }

@@ -32,7 +32,6 @@ use PP\Command\Migrate\MigrateListCommand;
 use PP\Command\Migrate\MigrateUpCommand;
 use PP\Command\Migrate\MigrateCreateCommand;
 use PP\Command\Templates\ConvertTemplatesCommand;
-use PP\Command\Templates\VerifyTemplatesCommand;
 
 /**
  * Class ConsoleApplication.
@@ -216,7 +215,6 @@ class ConsoleApplication extends Application
         $this->add(new MigrateUpCommand());
         $this->add(new MigrateCreateCommand());
         $this->add(new ConvertTemplatesCommand());
-        $this->add(new VerifyTemplatesCommand());
 
         return $this;
     }

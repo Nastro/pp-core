@@ -58,6 +58,13 @@ class PXObjects extends PXContentObjects
 		$this[$type] = $objsArray;
 	}
 
+	public function __isset($key)
+	{
+		// keeps twig attribute lookup on the guarded __get path: without
+		// this it falls through to the unguarded getCurrent()/getFirst()
+		return $key === 'current' || $key === 'first' || isset($this->$key);
+	}
+
 	public function __get($key)
 	{
 		switch ($key) {

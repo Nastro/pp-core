@@ -16,13 +16,15 @@ class PXStructLeaf implements Iterator
 
     public function __call($name, $arguments)
     {
-        if (method_exists($this->data, $name)) {
+        if (is_object($this->data) && method_exists($this->data, $name)) {
             return call_user_func_array([$this->data, $name], $arguments);
-
-        } else {
-            $trace = PXTrace(); // TODO: refactor
-            FatalError('Call to undefined method ' . self::class . '::' . $name . '() in ' . $trace[1]['file'] . ' on line ' . $trace[1]['line']);
         }
+
+        // BadMethodCallException is recognized by twig attribute resolution
+        // (returns null in non-strict mode, like smarty does for missing keys)
+        throw new BadMethodCallException(
+            'Call to undefined method ' . static::class . '::' . $name . '()'
+        );
     }
 
     public function parent($level = 1)
@@ -40,6 +42,11 @@ class PXStructLeaf implements Iterator
             return null;
         }
         return $this->data->content[$key];
+    }
+
+    public function __isset($key)
+    {
+        return isset($this->data->{$key}) || isset($this->data->content[$key]);
     }
 
     public function path()
@@ -179,12 +186,15 @@ class PXTreeObjects implements ContentObjectsInterface, ArrayAccess, Iterator
 
     public function __call($name, $arguments)
     {
-        if (method_exists($this->tree, $name)) {
+        if (is_object($this->tree) && method_exists($this->tree, $name)) {
             return call_user_func_array([$this->tree, $name], $arguments);
-        } else {
-            $trace = pxtrace();
-            FatalError('Call to undefined method ' . self::class . '::' . $name . '() in ' . $trace[1]['file'] . ' on line ' . $trace[1]['line']);
         }
+
+        // BadMethodCallException is recognized by twig attribute resolution
+        // (returns null in non-strict mode, like smarty does for missing keys)
+        throw new BadMethodCallException(
+            'Call to undefined method ' . static::class . '::' . $name . '()'
+        );
     }
 
     public function __get($key)
@@ -212,6 +222,13 @@ class PXTreeObjects implements ContentObjectsInterface, ArrayAccess, Iterator
 
     public function __isset($key)
     {
+        // __get always resolves these to a leaf (404 fallback); without this,
+        // twig attribute lookup would fall through to the Iterator::current()
+        // method instead of the magic property
+        if ($key === 'current' || $key === 'root') {
+            return true;
+        }
+
         return isset($this->$key) || isset($this->tree->$key);
     }
 

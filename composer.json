@@ -43,12 +43,15 @@
 		"ext-fileinfo": "*",
 		"ext-dom": "*",
 		"ext-xsl": "*",
-		"ext-mbstring": "*",
-		"twig/twig": "^3.0"
+		"ext-mbstring": "*"
 	},
 	"require-dev": {
 		"phpunit/phpunit": "^9.0",
-		"friendsofphp/php-cs-fixer": "^3.23"
+		"friendsofphp/php-cs-fixer": "^3.23",
+		"twig/twig": "^3.0"
+	},
+	"suggest": {
+		"twig/twig": "^3.0 — требуется для PP\\Lib\\Html\\Layout\\TwigLayout (шаблонизатор клиентской части через DI)"
 	},
 	"autoload": {
 		"psr-4": {
