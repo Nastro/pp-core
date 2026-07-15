@@ -128,7 +128,7 @@ final class PXRegistry {
 	}
 
 	/**
-	 * @return Layout\NullLayout|PXUserHTMLLayout
+	 * @return Layout\LayoutInterface
 	 */
 	public static function getLayout() {
 		return self::get('layout');

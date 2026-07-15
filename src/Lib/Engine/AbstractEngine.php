@@ -123,7 +123,10 @@ abstract class AbstractEngine implements EngineInterface
 
     protected function compileContainer()
     {
-        if (!$this->containerConfigCache->isFresh()) {
+        if ($this->container instanceof ContainerBuilder
+            && !$this->container->isCompiled()
+            && !$this->containerConfigCache->isFresh()
+        ) {
             $this->container->compile(true);
         }
     }

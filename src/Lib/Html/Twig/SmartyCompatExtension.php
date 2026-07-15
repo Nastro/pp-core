@@ -25,6 +25,7 @@ class SmartyCompatExtension extends AbstractExtension
     {
         return [
             new TwigFilter('smarty_escape', [$this, 'escape'], ['is_safe' => ['all']]),
+            new TwigFilter('smarty_capitalize', [$this, 'capitalize']),
             new TwigFilter('cat', [$this, 'cat']),
             new TwigFilter('smarty_replace', [$this, 'replace']),
             new TwigFilter('regex_replace', [$this, 'regexReplace']),
@@ -129,6 +130,30 @@ class SmartyCompatExtension extends AbstractExtension
             default:
                 return htmlspecialchars($string, ENT_QUOTES, DEFAULT_CHARSET);
         }
+    }
+
+    /**
+     * smarty_modifier_capitalize — ucfirst per word, keeping the rest of
+     * the word intact (unlike twig `title`/php ucwords); words containing
+     * digits are left untouched unless $ucDigits is set.
+     *
+     * @param mixed $string
+     * @param bool $ucDigits
+     * @return string
+     */
+    public function capitalize($string, $ucDigits = false)
+    {
+        return preg_replace_callback(
+            "!'?\\b\\w(\\w|')*\\b!",
+            static function ($match) use ($ucDigits) {
+                if ((substr($match[0], 0, 1) !== "'" && !preg_match('!\d!', $match[0])) || $ucDigits) {
+                    return ucfirst($match[0]);
+                }
+
+                return $match[0];
+            },
+            (string)$string
+        );
     }
 
     /**
@@ -238,18 +263,20 @@ class SmartyCompatExtension extends AbstractExtension
             return '';
         }
 
-        if (mb_strlen($string) > $length) {
-            $length -= min($length, mb_strlen($etc));
+        if (mb_strlen($string, DEFAULT_CHARSET) > $length) {
+            $length -= min($length, mb_strlen($etc, DEFAULT_CHARSET));
 
             if (!$breakWords && !$middle) {
-                $string = preg_replace('/\s+?(\S+)?$/' . REGEX_MOD, '', mb_substr($string, 0, $length + 1));
+                $string = preg_replace('/\s+?(\S+)?$/' . REGEX_MOD, '', mb_substr($string, 0, $length + 1, DEFAULT_CHARSET));
             }
 
             if (!$middle) {
-                return mb_substr($string, 0, $length) . $etc;
+                return mb_substr($string, 0, $length, DEFAULT_CHARSET) . $etc;
             }
 
-            return mb_substr($string, 0, (int)($length / 2)) . $etc . mb_substr($string, -(int)($length / 2));
+            return mb_substr($string, 0, (int)($length / 2), DEFAULT_CHARSET)
+                . $etc
+                . mb_substr($string, -(int)($length / 2), null, DEFAULT_CHARSET);
         }
 
         return $string;
@@ -347,11 +374,11 @@ class SmartyCompatExtension extends AbstractExtension
     protected function strftimeCompat($format, $timestamp)
     {
         static $map = [
-            '%a' => 'D', '%A' => 'l', '%d' => 'd', '%e' => 'j', '%u' => 'N', '%w' => 'w',
+            '%a' => 'D', '%A' => 'l', '%d' => 'd', '%u' => 'N', '%w' => 'w',
             '%b' => 'M', '%B' => 'F', '%h' => 'M', '%m' => 'm',
             '%y' => 'y', '%Y' => 'Y', '%C' => '',
             '%H' => 'H', '%I' => 'h', '%l' => 'g', '%M' => 'i', '%p' => 'A', '%P' => 'a',
-            '%S' => 's', '%s' => 'U', '%e' => 'j',
+            '%S' => 's', '%s' => 'U',
             '%D' => 'm/d/y', '%F' => 'Y-m-d', '%R' => 'H:i', '%T' => 'H:i:s',
             '%n' => "\n", '%t' => "\t", '%%' => '%',
         ];
@@ -362,6 +389,14 @@ class SmartyCompatExtension extends AbstractExtension
         for ($i = 0; $i < $length; $i++) {
             if ($format[$i] === '%' && $i + 1 < $length) {
                 $spec = substr($format, $i, 2);
+
+                // strftime %e is space-padded, date('j') is not
+                if ($spec === '%e') {
+                    $result .= sprintf('%2d', (int)date('j', $timestamp));
+                    $i++;
+                    continue;
+                }
+
                 if (isset($map[$spec])) {
                     $result .= date($map[$spec], $timestamp);
                     $i++;

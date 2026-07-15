@@ -87,14 +87,6 @@ abstract class LayoutAbstract implements LayoutInterface
     /**
      * {@inheritdoc}
      */
-    public function getSmarty()
-    {
-        return null;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
     public function getIndexTemplate()
     {
         return null;

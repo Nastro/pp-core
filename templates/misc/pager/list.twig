@@ -1,7 +1,7 @@
 {{- pager({objects: someObjects, format: contentType, notshow: true}) -}}
 {%- set a_per_page, page = layout_var('a_per_page'), layout_var('page') -%}
 {%- if a_per_page -%}
-{%- for object in someObjects -%}
+{%- for id, object in someObjects -%}
 {%- if loop.index <= a_per_page * page and loop.index > a_per_page * (page - 1) -%}
 {%- if smarty_file_exists('dt/' ~ contentType ~ '.twig') -%}
 {% include 'dt/' ~ contentType ~ '.twig' %}

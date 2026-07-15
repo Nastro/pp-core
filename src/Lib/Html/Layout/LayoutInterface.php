@@ -38,11 +38,6 @@ interface LayoutInterface
     public function getLang();
 
     /**
-     * @return \Smarty
-     */
-    public function getSmarty();
-
-    /**
      * @return string
      */
     public function getIndexTemplate();

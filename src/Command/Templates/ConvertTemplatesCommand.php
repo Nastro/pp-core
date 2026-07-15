@@ -67,7 +67,7 @@ class ConvertTemplatesCommand extends AbstractCommand
             $relative = ltrim(str_replace($root, '', $file), '/');
             $target = preg_replace('/\.tmpl$/', '.twig', $file);
 
-            if (file_exists($target) && !$input->getOption('force') && !$input->getOption('dry-run')) {
+            if (file_exists($target) && !$input->getOption('force')) {
                 $output->writeln("<comment>SKIP</comment>    {$relative} — .twig already exists (use --force)");
                 $stats['skipped']++;
                 continue;

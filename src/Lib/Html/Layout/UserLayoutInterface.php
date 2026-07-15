@@ -5,11 +5,10 @@ namespace PP\Lib\Html\Layout;
 /**
  * Client-side (user area) layout contract.
  *
- * Implemented by template-engine backed layouts (Smarty: PXUserHTMLLayout,
- * Twig: TwigLayout). The concrete engine is selected through the DI container
- * by defining a public service with id `PP\Lib\Html\Layout\LayoutInterface`
- * in the project services.yml; when no such service is defined, the engine
- * falls back to the legacy Smarty-based PXUserHTMLLayout.
+ * Implemented by template-engine backed layouts (TwigLayout by default).
+ * The concrete engine is selected through the DI container by defining
+ * a public service with id `PP\Lib\Html\Layout\LayoutInterface` in the
+ * project services.yml; when no such service is defined, TwigLayout is used.
  *
  * Interface UserLayoutInterface
  * @package PP\Lib\Html\Layout

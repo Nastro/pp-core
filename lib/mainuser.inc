@@ -8,7 +8,6 @@ $Id$
 
 require_once __DIR__ . '/maincommon.inc';
 
-require_once PPLIBPATH . 'HTML/layout.class.inc';
 require_once PPLIBPATH . 'HTML/assets.class.inc';
 require_once PPLIBPATH . 'HTML/inlineimage.class.inc';
 

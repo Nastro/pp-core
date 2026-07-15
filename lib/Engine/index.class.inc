@@ -4,6 +4,7 @@ use PP\Lib\Http\Response;
 use PP\DependencyInjection\ContainerAwareInterface;
 use PP\Lib\Engine\AbstractEngine;
 use PP\Lib\Html\Layout\LayoutInterface;
+use PP\Lib\Html\Layout\TwigLayout;
 use PP\Lib\Html\Layout\UserLayoutInterface;
 
 class PXEngineIndex extends AbstractEngine
@@ -30,14 +31,18 @@ class PXEngineIndex extends AbstractEngine
 
     /**
      * Template engine is swappable: project may define a public service
-     * with id `PP\Lib\Html\Layout\LayoutInterface` in app/config/services.yml
-     * (e.g. pointing to PP\Lib\Html\Layout\TwigLayout). Without the service
-     * legacy Smarty-based PXUserHTMLLayout is used.
+     * with id `PP\Lib\Html\Layout\LayoutInterface` in app/config/services.yml.
+     * Without the service the default TwigLayout is used.
      *
      * @param string $layoutClass
      */
     protected function initLayout($layoutClass)
     {
+        // the layout is resolved during initApplication(), before the engine
+        // constructor compiles the container — compile it now so the service
+        // is instantiated from a fully processed definition
+        $this->compileContainer();
+
         if ($this->container->has($layoutClass)) {
             $layout = $this->container->get($layoutClass);
 
@@ -49,7 +54,7 @@ class PXEngineIndex extends AbstractEngine
                 ));
             }
         } else {
-            $layout = new PXUserHTMLLayout();
+            $layout = new TwigLayout();
         }
 
         $this->layout = $layout->setApp($this->app);

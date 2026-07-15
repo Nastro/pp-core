@@ -31,6 +31,9 @@ class Converter
         'html_import', 'jquery', 'layout_var', 'pager_href',
     ];
 
+    /** block functions registered by TwigLayout out of the box */
+    private const KNOWN_BLOCKS = ['assets_apply'];
+
     /** @var ExpressionConverter */
     private $expression;
 
@@ -42,6 +45,9 @@ class Converter
 
     /** @var bool inside {strip} */
     private $stripDepth = 0;
+
+    /** @var int[] output buffer offsets where open {strip} blocks began */
+    private $stripStarts = [];
 
     /** @var int current source line (1-based) */
     private $line = 1;
@@ -81,6 +87,7 @@ class Converter
         $this->result = new ConversionResult();
         $this->stack = [];
         $this->stripDepth = 0;
+        $this->stripStarts = [];
         $this->line = 1;
         $this->out = '';
         $this->smartyAte = false;
@@ -140,7 +147,7 @@ class Converter
                     break;
                 }
                 $content = substr($source, $tagEnd + 1, $close - $tagEnd - 1);
-                $this->line += substr_count($rawTag . $content, "\n") + 1;
+                $this->line += substr_count($rawTag . $content, "\n");
                 $this->emitLiteral($content);
                 $pos = $close + strlen('{/literal}');
                 continue;
@@ -269,6 +276,7 @@ class Converter
 
             case 'strip':
                 $this->stripDepth++;
+                $this->stripStarts[] = strlen($this->out);
                 $this->pendingLtrim = true;
                 return;
 
@@ -333,20 +341,37 @@ class Converter
                 return;
 
             case 'section':
+                $top = end($this->stack);
+
+                if ($top !== false && $top['tag'] === 'section' && !empty($top['extra']['unconverted'])) {
+                    array_pop($this->stack);
+                    $this->emitUnconverted($rawTag);
+                    return;
+                }
+
                 $this->popFrame('section');
                 $this->emitBlock('endfor');
                 return;
 
             case 'capture':
+                $top = end($this->stack);
                 $this->popFrame('capture');
                 $this->emitBlock('endset');
+
+                // {capture name=X assign=Y}: smarty fills both $Y and
+                // $smarty.capture.X — mirror the value into the second var
+                if ($top !== false && $top['tag'] === 'capture' && !empty($top['extra']['also'])) {
+                    $this->emitBlock('set ' . $top['extra']['also'] . ' = ' . $top['extra']['var']);
+                }
                 return;
 
             case 'strip':
                 $this->stripDepth = max(0, $this->stripDepth - 1);
                 // smarty rtrims the text block right before {/strip}
-                // and keeps the newline following the tag
-                $this->out = rtrim($this->out);
+                // and keeps the newline following the tag; only the output
+                // emitted inside this {strip} may be trimmed
+                $start = array_pop($this->stripStarts) ?? 0;
+                $this->out = substr($this->out, 0, $start) . rtrim(substr($this->out, $start));
                 $this->smartyAte = false;
                 return;
 
@@ -409,13 +434,19 @@ class Converter
             unset($attrs['step']); // explicit step=1 equals the default
         }
 
+        $name = trim($attrs['name'], '\'" ');
+
         foreach (['step', 'max', 'show'] as $unsupported) {
             if (isset($attrs[$unsupported])) {
                 $this->issue("{section} attribute '{$unsupported}' is not supported — port manually", ConversionIssue::ERROR);
+                // no twig emitted: a loop silently ignoring the attribute
+                // would look correct while behaving differently
+                $this->pushFrame('section', $name, ['unconverted' => true]);
+                $this->emitUnconverted($rawTag);
+                return;
             }
         }
 
-        $name = trim($attrs['name'], '\'" ');
         $loopVar = $this->sectionLoopVar($name);
         $totalVar = $loopVar . '_total';
 
@@ -436,15 +467,13 @@ class Converter
     {
         $attrs = $this->parseAttributes($attrString);
 
-        if (isset($attrs['assign'])) {
-            $var = trim($attrs['assign'], '\'" ');
-        } elseif (isset($attrs['name'])) {
-            $var = $this->captureVar(trim($attrs['name'], '\'" '));
-        } else {
-            $var = $this->captureVar('default');
-        }
+        $assign = isset($attrs['assign']) ? trim($attrs['assign'], '\'" ') : null;
+        $name = isset($attrs['name']) ? trim($attrs['name'], '\'" ') : null;
 
-        $this->pushFrame('capture');
+        $var = $assign ?? $this->captureVar($name ?? 'default');
+        $also = ($assign !== null && $name !== null) ? $this->captureVar($name) : null;
+
+        $this->pushFrame('capture', null, ['var' => $var, 'also' => $also]);
         $this->emitBlock("set {$var}");
     }
 
@@ -602,10 +631,13 @@ class Converter
 
             $hash = $this->attrsToHash($attrs);
             $this->emitBlock('apply ' . $name . ($hash !== '' ? '(' . $hash . ')' : ''));
-            $this->issue(
-                "block {{$name}} converted to twig `apply` filter — make sure the block is registered via addTemplateBlock()",
-                ConversionIssue::WARNING
-            );
+
+            if (!in_array($name, self::KNOWN_BLOCKS, true)) {
+                $this->issue(
+                    "block {{$name}} converted to twig `apply` filter — make sure the block is registered via addTemplateBlock()",
+                    ConversionIssue::WARNING
+                );
+            }
             return;
         }
 
@@ -800,6 +832,13 @@ class Converter
             $attrs[$name] = substr($s, $vStart, $i - $vStart);
         }
 
+        // smarty-only caching flag: meaningless in twig and would leak
+        // into include/function hashes as a `nocache` variable
+        if (isset($attrs['nocache'])) {
+            unset($attrs['nocache']);
+            $this->issue("smarty-only 'nocache' attribute dropped", ConversionIssue::WARNING);
+        }
+
         return $attrs;
     }
 
@@ -807,9 +846,9 @@ class Converter
     // scope stack helpers (also used by ExpressionConverter)
     // ------------------------------------------------------------------
 
-    private function pushFrame($tag, $name = null)
+    private function pushFrame($tag, $name = null, $extra = [])
     {
-        $this->stack[] = ['tag' => $tag, 'name' => $name, 'line' => $this->line];
+        $this->stack[] = ['tag' => $tag, 'name' => $name, 'line' => $this->line, 'extra' => $extra];
     }
 
     private function popFrame($tag)

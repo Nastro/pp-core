@@ -26,16 +26,16 @@ class ExpressionConverter
         'escape' => 'smarty_escape',
         'default' => 'smarty_default',
         'replace' => 'smarty_replace',
-        'capitalize' => 'title',
+        'capitalize' => 'smarty_capitalize',
         'indent' => 'indent',
     ];
 
     /** modifiers registered by TwigLayout/SmartyCompatExtension */
     private const KNOWN_MODIFIERS = [
-        'smarty_escape', 'smarty_default', 'smarty_replace', 'cat', 'regex_replace',
+        'smarty_escape', 'smarty_capitalize', 'smarty_default', 'smarty_replace', 'cat', 'regex_replace',
         'strip', 'strip_tags', 'date_format', 'string_format', 'truncate', 'indent',
         'spacify', 'wordwrap', 'count', 'sizeof', 'isset', 'empty', 'property',
-        'lang', 'date_to_time', 'title',
+        'lang', 'date_to_time',
     ];
 
     /** twig built-in filters considered semantically compatible */
@@ -148,9 +148,12 @@ class ExpressionConverter
             && !in_array($twigName, self::TWIG_NATIVE_FILTERS, true)
             && !function_exists($twigName)
         ) {
+            // project modifiers registered at web runtime via
+            // addTemplateModifier() are not visible here (CLI) — warn,
+            // like for unknown function tags, instead of failing the file
             $this->converter->issue(
-                "modifier '{$name}' is not a known twig filter nor a PHP function — register it in TwigLayout or fix manually",
-                ConversionIssue::ERROR
+                "modifier '{$name}' is not a known twig filter nor a PHP function — make sure the project registers it via addTemplateModifier()",
+                ConversionIssue::WARNING
             );
         }
 
@@ -555,9 +558,11 @@ class ExpressionConverter
         }
 
         if (!function_exists($name)) {
+            // the converter runs in CLI and may not see functions defined
+            // only in the web bootstrap — do not fail the file over it
             $this->converter->issue(
-                "function '{$name}()' does not exist — twig will fail at runtime",
-                ConversionIssue::ERROR
+                "function '{$name}()' is not defined in CLI context — make sure it is available at web runtime",
+                ConversionIssue::WARNING
             );
         }
 

@@ -2,7 +2,6 @@
 /REVISION
 .AppleDouble
 /vendor/*
-!/vendor/Smarty/
 /auth.json
 composer.lock
 *.iml

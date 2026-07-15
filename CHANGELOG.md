@@ -1,21 +1,36 @@
 # Change log
 
-## [3.1.12] 2026-07-10
-- Шаблонизатор клиентской части выбирается через DI: сервис `PP\Lib\Html\Layout\LayoutInterface`
-  в services.yml проекта, фолбэк на легаси `PXUserHTMLLayout` (Smarty 2) без конфигурации
-- Добавлен `TwigLayout` — реализация клиентского layout на Twig 3, включая пагинацию
-  (`pager`/`autopager`, `templates/misc/pager/*.twig`) и Smarty-совместимые фильтры
-- Twig — опциональная зависимость (`suggest`): pp-core не требует `twig/twig` сам,
-  пакет ставит проект, включающий `TwigLayout`; без него ядро работает как «голое» API
-- Консольная команда `templates:convert` — конвертация Smarty 2 → Twig с отчётом
-  о местах, требующих ручного вмешательства, см. docs/templates.md
+## [4.0.0] 2026-07-15
+
+**BREAKING**: Smarty полностью удалён из ядра. Проектам, которым нужен Smarty,
+следует оставаться на ветке 3.x.
+
+- Удалены Smarty 2 (`vendor/Smarty`), `PXUserHTMLLayout`, `lib/smarty.plugins/`
+  и Smarty-версии шаблонов пейджера (`templates/misc/pager/*.tmpl`)
+- Клиентский шаблонизатор по умолчанию — `TwigLayout` (Twig 3); `twig/twig`
+  теперь обязательная зависимость
+- Шаблонизатор по-прежнему подменяем через DI: публичный сервис
+  `PP\Lib\Html\Layout\LayoutInterface` в services.yml проекта (обязан
+  реализовывать `UserLayoutInterface`)
+- Плагины `createpath`, `img`, `html_import`, `jquery`, `assets_apply`,
+  `date_to_time` портированы в `PP\Lib\Html\Twig\CoreFunctionsExtension`
+  и регистрируются `TwigLayout` из коробки
+- **BREAKING**: из `LayoutInterface` удалён `getSmarty()`; добавлены
+  `display()` и `setDebug()` — кастомные реализации интерфейса нужно обновить
+- Пагинация (`pager`/`autopager`, `templates/misc/pager/*.twig`) и
+  Smarty-совместимые фильтры (`PP\Lib\Html\Twig\SmartyCompatExtension`) —
+  вывод байт-в-байт совместим с рендером Smarty-версии
+- Консольная команда `templates:convert` — конвертация исходников Smarty 2 → Twig
+  с отчётом о местах, требующих ручного вмешательства, см. docs/templates.md;
+  `===`/`!==` → twig-тест `is same as()`, `{section step=1}` — штатный,
+  корректный разбор пути после динамического ключа (`$a->b.$k->c` → `a.b[k].c`),
+  бэкслеши в строковых литералах перекодируются под лексер Twig,
+  `{capture name=X assign=Y}` заполняет обе переменные,
+  `{section}` с `step`/`max`/`show` остаётся `{# UNCONVERTED #}`,
+  smarty-флаг `nocache` отбрасывается с предупреждением
 - Исправлена инициализация фабрик в `AbstractEngine`: поддержка интерфейсов в качестве
-  фабрики (через init-хелпер и DI-контейнер), добавлен `LayoutInterface::setDebug()`
-- Конвертер шаблонов: `===`/`!==` конвертируются в twig-тест `is same as()` (строгое
-  сравнение вместо даунгрейда до `==`/`!=`), `{section step=1}` считается штатным,
-  исправлен разбор пути после динамического ключа (`$a->b.$k->c` → `a.b[k].c`)
-- `TwigLayout`: фолбэк модификаторов на PHP-функции, принимающие аргумент по ссылке
-  (`reset`, `end`, `current`, `key`, ...), больше не приводит к ошибке рендера
+  фабрики (через init-хелпер и DI-контейнер); контейнер компилируется до
+  получения layout-сервиса из DI
 - `PXStructLeaf`/`PXTreeObjects`: `__call` кидает `BadMethodCallException` вместо
   `FatalError` (Twig перехватывает его при разрешении атрибутов), добавлен
   `PXStructLeaf::__isset`, `PXTreeObjects::__isset` возвращает true для `current`/`root` —
@@ -24,8 +39,10 @@
 - `PXObjects::__isset`: доступ `objects.current`/`objects.first` из Twig идёт через
   защищённый `__get`, а не через незащищённый `getCurrent()` (давал Warning
   «Undefined array key -1» и null на страницах без текущего объекта)
-- Конвертер: бэкслеши в строковых литералах перекодируются под лексер Twig
-  (`stripcslashes`) — регэкспы вида `'/\?.*$/'` больше не ломаются при конвертации
+- `TwigLayout`: фолбэк модификаторов на PHP-функции, принимающие аргумент по ссылке
+  (`reset`, `end`, `current`, `key`, ...), больше не приводит к ошибке рендера;
+  добавлен `getVarByRef()`; выходные фильтры хранятся списком callable —
+  объектные и closure-колбэки в `addFilter()` больше не ломаются
 
 ## [3.1.11] 2026-02-24
 - Улучшение безопасности работы с сессией в админ панели

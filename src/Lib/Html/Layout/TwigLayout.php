@@ -2,6 +2,7 @@
 
 namespace PP\Lib\Html\Layout;
 
+use PP\Lib\Html\Twig\CoreFunctionsExtension;
 use PP\Lib\Html\Twig\SmartyCompatExtension;
 use Twig\Environment;
 use Twig\Extension\DebugExtension;
@@ -10,19 +11,15 @@ use Twig\TwigFilter;
 use Twig\TwigFunction;
 
 /**
- * Twig-backed client-side layout.
+ * Twig-backed client-side layout — the default template engine.
  *
- * Drop-in replacement for the legacy Smarty-based PXUserHTMLLayout.
- * Enable it by defining a public DI service in project services.yml:
+ * A project may swap the engine by defining a public DI service with id
+ * `PP\Lib\Html\Layout\LayoutInterface` in services.yml pointing to its
+ * own UserLayoutInterface implementation.
  *
- *     services:
- *         PP\Lib\Html\Layout\LayoutInterface:
- *             class: PP\Lib\Html\Layout\TwigLayout
- *             public: true
- *
- * Templates are looked up in the same directories as Smarty ones
- * (local/templates, libpp/templates) with `.twig` extension; `.tmpl`
- * names requested by the modules are remapped transparently.
+ * Templates are looked up in local/templates, then libpp/templates with
+ * `.twig` extension; legacy `.tmpl` names requested by the modules are
+ * remapped transparently.
  *
  * Class TwigLayout
  * @package PP\Lib\Html\Layout
@@ -35,7 +32,7 @@ class TwigLayout implements UserLayoutInterface
     /** @var array template variables */
     protected $vars = [];
 
-    /** @var array output filters, same semantics as PXUserHTMLLayout */
+    /** @var array post-render output filters: list of [callable, args] */
     protected $filters = [];
 
     /** @var string */
@@ -43,9 +40,6 @@ class TwigLayout implements UserLayoutInterface
 
     /** @var \PXUserHTMLLang */
     protected $lang;
-
-    /** @var bool */
-    protected $coreRegistered = false;
 
     /** @var string[]|null */
     protected $customDirs;
@@ -55,12 +49,6 @@ class TwigLayout implements UserLayoutInterface
      */
     public function __construct(array $templateDirs = null)
     {
-        if (!class_exists(Environment::class)) {
-            throw new \RuntimeException(
-                'TwigLayout requires the optional "twig/twig" package: composer require "twig/twig:^3.0"'
-            );
-        }
-
         $this->customDirs = $templateDirs;
 
         $loader = new FilesystemLoader(array_filter($this->templateDirs(), 'is_dir'));
@@ -77,9 +65,11 @@ class TwigLayout implements UserLayoutInterface
         ]);
 
         $this->twig->addExtension(new SmartyCompatExtension());
+        $this->twig->addExtension(new CoreFunctionsExtension($this));
 
-        // Smarty 2 falls back to plain PHP functions for unknown
-        // modifiers ({$var|quot}) and template functions — keep that.
+        // Smarty 2 fell back to plain PHP functions for unknown
+        // modifiers ({$var|quot}) and template functions — keep that
+        // for templates converted from Smarty.
         $this->twig->registerUndefinedFilterCallback(function ($name) {
             if (!function_exists($name)) {
                 return false;
@@ -126,11 +116,6 @@ class TwigLayout implements UserLayoutInterface
 
     private function registerCore()
     {
-        if ($this->coreRegistered) {
-            return;
-        }
-        $this->coreRegistered = true;
-
         $this->addTemplateFunction('property', [$this, 'getProperty']);
         $this->addTemplateModifier('property', [$this, 'getPropertyModifier']);
 
@@ -140,23 +125,10 @@ class TwigLayout implements UserLayoutInterface
         $this->addTemplateFunction('pager', [$this, 'pager']);
         $this->addTemplateFunction('autopager', [$this, 'autopager']);
 
-        // dynamic access to layout vars assigned mid-render (Smarty
+        // dynamic access to layout vars assigned mid-render (legacy
         // plugins mutate template scope; Twig context is a snapshot)
         $this->twig->addFunction(new TwigFunction('layout_var', [$this, 'getVar']));
         $this->twig->addFunction(new TwigFunction('pager_href', [$this, 'buildPagerHref'], ['is_safe' => ['all']]));
-
-        // reuse legacy smarty function plugins as-is: their signature
-        // ($params, &$smarty) only relies on ->assign(), available here
-        foreach (['createpath', 'img', 'html_import', 'jquery'] as $plugin) {
-            $file = PPLIBPATH . 'smarty.plugins/function.' . $plugin . '.php';
-            if (file_exists($file)) {
-                require_once $file;
-                $this->addTemplateFunction($plugin, 'smarty_function_' . $plugin);
-            }
-        }
-
-        require_once PPLIBPATH . 'smarty.plugins/modifier.date_to_time.php';
-        $this->addTemplateModifier('date_to_time', 'smarty_modifier_date_to_time');
     }
 
     /**
@@ -185,14 +157,6 @@ class TwigLayout implements UserLayoutInterface
     public function getLang()
     {
         return $this->lang;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getSmarty()
-    {
-        return null;
     }
 
     /**
@@ -319,6 +283,19 @@ class TwigLayout implements UserLayoutInterface
     }
 
     /**
+     * @param string $varName
+     * @return mixed
+     */
+    public function &getVarByRef($varName)
+    {
+        if (!array_key_exists($varName, $this->vars)) {
+            $this->vars[$varName] = null;
+        }
+
+        return $this->vars[$varName];
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function changeIndexTemplate($filename = 'index.tmpl')
@@ -352,20 +329,8 @@ class TwigLayout implements UserLayoutInterface
     {
         $html = $this->html($this->indexTemplate);
 
-        foreach ($this->filters as $filter => $filterArgs) {
-            if (strstr((string)$filter, '::')) {
-                $filter = explode('::', (string)$filter);
-
-                if (count($filter) > 2) {
-                    trigger_error(sprintf('malformed filter %s', join('::', $filter)), E_WARNING);
-                    continue;
-                }
-            }
-
-            if (is_callable($filter)) {
-                array_unshift($filterArgs, $html, $this);
-                $html = call_user_func_array($filter, $filterArgs);
-            }
+        foreach ($this->filters as [$callback, $args]) {
+            $html = call_user_func_array($callback, array_merge([$html, $this], $args));
         }
 
         return $html;
@@ -376,12 +341,20 @@ class TwigLayout implements UserLayoutInterface
      */
     public function addFilter($functionName)
     {
-        $args = func_get_args();
-        array_shift($args);
-
-        if (is_callable($functionName)) {
-            $this->filters[is_array($functionName) ? join('::', $functionName) : $functionName] = $args;
+        if (!is_callable($functionName)) {
+            return;
         }
+
+        $args = array_slice(func_get_args(), 1);
+
+        foreach ($this->filters as $i => [$callback]) {
+            if ($callback === $functionName) {
+                $this->filters[$i] = [$functionName, $args];
+                return;
+            }
+        }
+
+        $this->filters[] = [$functionName, $args];
     }
 
     /**
@@ -389,7 +362,11 @@ class TwigLayout implements UserLayoutInterface
      */
     public function removeFilter($functionName)
     {
-        unset($this->filters[is_array($functionName) ? join('::', $functionName) : $functionName]);
+        foreach ($this->filters as $i => [$callback]) {
+            if ($callback === $functionName) {
+                unset($this->filters[$i]);
+            }
+        }
     }
 
     // back-compat. deprecated
@@ -486,7 +463,7 @@ class TwigLayout implements UserLayoutInterface
     }
 
     /**
-     * Pagination: same contract as PXUserHTMLLayout::htmlPager().
+     * Pagination: same contract as the legacy Smarty-era htmlPager().
      *
      * @param int $totalObjects
      * @param int $objectsPerPage

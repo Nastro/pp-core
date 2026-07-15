@@ -23,7 +23,7 @@ class PXUserHTMLLang
 	}
 
 	/**
-	 * smarty_modifier_lang
+	 * Template modifier: {{ path|lang }}
 	 */
 	public function lang_modifier($path)
 	{
@@ -32,7 +32,7 @@ class PXUserHTMLLang
 	}
 
 	/**
-	 * smarty_function_lang
+	 * Template function: {{ lang({get: ...}) }}
 	 * @return string
 	 */
 	public function lang($param, &$smarty)

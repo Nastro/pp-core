@@ -29,6 +29,7 @@ class SmartyToTwigConverterTest extends AbstractUnitTest
         $this->assertEquals("{{ missing|smarty_default('n/a') }}", $this->convert("{\$missing|default:'n/a'}"));
         $this->assertEquals("{{ a|cat(', ')|cat(b) }}", $this->convert("{\$a|cat:', '|cat:\$b}"));
         $this->assertEquals("{{ text|smarty_replace('a', 'b') }}", $this->convert("{\$text|replace:'a':'b'}"));
+        $this->assertEquals('{{ title|smarty_capitalize }}', $this->convert('{$title|capitalize}'));
         $this->assertEquals('{{ items|count }}', $this->convert('{$items|@count}'));
     }
 
@@ -204,11 +205,15 @@ class SmartyToTwigConverterTest extends AbstractUnitTest
         $this->assertFalse($result->isClean());
     }
 
-    public function testUnknownModifierReportsError()
+    public function testUnknownModifierWarns()
     {
+        // project modifiers registered at web runtime are not visible to
+        // the CLI converter — the file must stay convertible (no ERROR)
         $result = $this->converter->convertSource('{$x|definitely_not_a_function_9000}');
 
-        $this->assertNotEmpty($result->getIssues(ConversionIssue::ERROR));
+        $this->assertNotEmpty($result->getIssues(ConversionIssue::WARNING));
+        $this->assertTrue($result->isClean());
+        $this->assertEquals('{{ x|definitely_not_a_function_9000 }}', $result->twig);
     }
 
     public function testAssignInsideLoopWarns()
