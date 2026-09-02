@@ -9,7 +9,7 @@ class PXTriggerSystemZoom extends PXAbstractSystemTrigger
     {
         PXRegistry::assignToObject($this);
 
-        if (!$this->app->isAdminEngine() && $this->layout instanceof PXUserHTMLLayout) {
+        if (!$this->app->isAdminEngine() && $this->layout instanceof \PP\Lib\Html\Layout\UserLayoutInterface) {
             $this->layout->addFilter(['PXZoomFilter', 'run']);
         }
     }

@@ -322,14 +322,18 @@ class SmartyCompatExtension extends AbstractExtension
     }
 
     /**
-     * smarty_modifier_date_format (strftime-compatible, without deprecated strftime)
+     * smarty_modifier_date_format (strftime-compatible, without deprecated
+     * strftime), including the pp-core customizations of the legacy plugin:
+     * russian day/month names for %a/%A/%b/%B/%h, extra month specifiers
+     * %B2 (genitive), %B3 (prepositional), %BE (english) and unpadded %e.
      *
      * @param mixed $string timestamp or parsable date
      * @param string $format strftime format
      * @param mixed $default value used when $string is empty
+     * @param mixed $defaultStrftime skip localized replacements (legacy 4th arg)
      * @return string
      */
-    public function dateFormat($string, $format = '%b %e, %Y', $default = null)
+    public function dateFormat($string, $format = '%b %e, %Y', $default = null, $defaultStrftime = null)
     {
         if ($string != '') {
             $timestamp = $this->makeTimestamp($string);
@@ -339,7 +343,75 @@ class SmartyCompatExtension extends AbstractExtension
             return '';
         }
 
+        if (!$defaultStrftime) {
+            $format = $this->localizeFormat($format, $timestamp);
+        }
+
         return $this->strftimeCompat($format, $timestamp);
+    }
+
+    /**
+     * Localized specifier replacements ported from the customized
+     * vendor/Smarty/plugins/modifier.date_format.php. Replacement order
+     * matters: %B3/%B2/%BE must be handled before plain %B.
+     *
+     * @param string $format
+     * @param int $timestamp
+     * @return string
+     */
+    protected function localizeFormat($format, $timestamp)
+    {
+        static $weekdays = [
+            1 => 'Понедельник', 2 => 'Вторник', 3 => 'Среда', 4 => 'Четверг',
+            5 => 'Пятница', 6 => 'Суббота', 0 => 'Воскресенье',
+        ];
+        static $weekdaysShort = [
+            1 => 'Пн', 2 => 'Вт', 3 => 'Ср', 4 => 'Чт', 5 => 'Пт', 6 => 'Сб', 0 => 'Вс',
+        ];
+        static $months = [
+            '01' => 'Январь', '02' => 'Февраль', '03' => 'Март', '04' => 'Апрель',
+            '05' => 'Май', '06' => 'Июнь', '07' => 'Июль', '08' => 'Август',
+            '09' => 'Сентябрь', '10' => 'Октябрь', '11' => 'Ноябрь', '12' => 'Декабрь',
+        ];
+        static $months2 = [
+            '01' => 'января', '02' => 'февраля', '03' => 'марта', '04' => 'апреля',
+            '05' => 'мая', '06' => 'июня', '07' => 'июля', '08' => 'августа',
+            '09' => 'сентября', '10' => 'октября', '11' => 'ноября', '12' => 'декабря',
+        ];
+        static $months3 = [
+            '01' => 'январе', '02' => 'феврале', '03' => 'марте', '04' => 'апреле',
+            '05' => 'мае', '06' => 'июне', '07' => 'июле', '08' => 'августе',
+            '09' => 'сентябре', '10' => 'октябре', '11' => 'ноябре', '12' => 'декабре',
+        ];
+        static $monthsE = [
+            '01' => 'January', '02' => 'February', '03' => 'March', '04' => 'April',
+            '05' => 'May', '06' => 'June', '07' => 'July', '08' => 'August',
+            '09' => 'September', '10' => 'October', '11' => 'November', '12' => 'December',
+        ];
+        static $monthsShort = [
+            '01' => 'Янв', '02' => 'Фев', '03' => 'Мрт', '04' => 'Апр',
+            '05' => 'Май', '06' => 'Июн', '07' => 'Июл', '08' => 'Авг',
+            '09' => 'Сен', '10' => 'Окт', '11' => 'Ноя', '12' => 'Дек',
+        ];
+
+        $w = (int)date('w', $timestamp);
+        $m = date('m', $timestamp);
+
+        return str_replace(
+            ['%a', '%A', '%b', '%B3', '%B2', '%BE', '%B', '%e', '%h'],
+            [
+                $weekdaysShort[$w],
+                $weekdays[$w],
+                $monthsShort[$m],
+                $months3[$m],
+                $months2[$m],
+                $monthsE[$m],
+                $months[$m],
+                (string)(int)date('d', $timestamp), // day without leading zero, unpadded
+                $monthsShort[$m],
+            ],
+            $format
+        );
     }
 
     /**
@@ -350,6 +422,18 @@ class SmartyCompatExtension extends AbstractExtension
     {
         if (empty($value)) {
             return time();
+        }
+
+        // mysql timestamp format YYYYMMDDHHMMSS (smarty_make_timestamp)
+        if (preg_match('/^\d{14}$/', (string)$value)) {
+            return mktime(
+                (int)substr($value, 8, 2),
+                (int)substr($value, 10, 2),
+                (int)substr($value, 12, 2),
+                (int)substr($value, 4, 2),
+                (int)substr($value, 6, 2),
+                (int)substr($value, 0, 4)
+            );
         }
 
         if (is_numeric($value) && (int)$value == $value) {
@@ -376,7 +460,7 @@ class SmartyCompatExtension extends AbstractExtension
         static $map = [
             '%a' => 'D', '%A' => 'l', '%d' => 'd', '%u' => 'N', '%w' => 'w',
             '%b' => 'M', '%B' => 'F', '%h' => 'M', '%m' => 'm',
-            '%y' => 'y', '%Y' => 'Y', '%C' => '',
+            '%y' => 'y', '%Y' => 'Y',
             '%H' => 'H', '%I' => 'h', '%l' => 'g', '%M' => 'i', '%p' => 'A', '%P' => 'a',
             '%S' => 's', '%s' => 'U',
             '%D' => 'm/d/y', '%F' => 'Y-m-d', '%R' => 'H:i', '%T' => 'H:i:s',
@@ -393,6 +477,13 @@ class SmartyCompatExtension extends AbstractExtension
                 // strftime %e is space-padded, date('j') is not
                 if ($spec === '%e') {
                     $result .= sprintf('%2d', (int)date('j', $timestamp));
+                    $i++;
+                    continue;
+                }
+
+                // century, has no date() counterpart
+                if ($spec === '%C') {
+                    $result .= sprintf('%02d', intdiv((int)date('Y', $timestamp), 100));
                     $i++;
                     continue;
                 }
